@@ -305,10 +305,36 @@ function stripCitations(t){
   t = t.replace(/\((\d{1,3})\)/g, ' ');                       // (1) appels de note
   return t;
 }
+/* recolle la ponctuation isolée par l'espacement à la française :
+   - ouvrante  ( «  “  ‘  (  [  )  -> au mot SUIVANT
+   - fermante  ( : ; , . ! ? … » ” ’ ) ] % ) -> au mot PRÉCÉDENT
+   - le guillemet droit " s'alterne (1re occurrence ouvrante, 2e fermante) */
+const OPEN_P     = /^[«“‘(\[{¿¡]+$/;                       // uniquement de l'ouvrante
+const PUNCT_ONLY = /^[«“‘(\[{¿¡:;,.!?…»”’)\]}%·"']+$/;     // jeton 100% ponctuation
+function mergePieces(pieces){
+  const out = []; let pending = ''; let dq = false;
+  for(const p of pieces){
+    if(!p) continue;
+    if(p === '"'){                                   // guillemet droit ambigu : alterne
+      if(!dq){ pending += '"'; dq = true; }
+      else { dq = false; if(out.length) out[out.length-1] += '"'; else pending += '"'; }
+      continue;
+    }
+    if(PUNCT_ONLY.test(p)){
+      if(OPEN_P.test(p)) pending += p;                            // ouvrante -> mot suivant
+      else if(out.length) out[out.length-1] += p;                 // fermante (« : » « ». » …) -> mot précédent
+      else pending += p;
+      continue;
+    }
+    out.push(pending + p); pending = '';              // mot normal
+  }
+  if(pending){ if(out.length) out[out.length-1] += pending; else out.push(pending); }
+  return out;
+}
 function pushWords(arr, str){
   str = str.replace(/\s+/g,' ').trim();
   if(!str) return;
-  for(let w of str.split(' ')){
+  for(let w of mergePieces(str.split(' '))){
     if(!w) continue;
     if(w.length > 13){                  // découpe les mots très longs
       for(let i=0;i<w.length;i+=12){
